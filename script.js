@@ -250,6 +250,24 @@
       button.addEventListener('click', () => {
         const direction = Number(button.dataset.brideScroll || 1);
         const distance = Math.max(track.clientWidth * 0.9, 260);
+        const maxScroll = Math.max(track.scrollWidth - track.clientWidth, 0);
+        const edgeBuffer = 8;
+
+        if (direction > 0 && track.scrollLeft >= maxScroll - edgeBuffer) {
+          track.scrollTo({
+            left: 0,
+            behavior: 'smooth'
+          });
+          return;
+        }
+
+        if (direction < 0 && track.scrollLeft <= edgeBuffer) {
+          track.scrollTo({
+            left: maxScroll,
+            behavior: 'smooth'
+          });
+          return;
+        }
 
         track.scrollBy({
           left: direction * distance,
@@ -257,6 +275,124 @@
         });
       });
     });
+  }
+
+  function initBrideMediaRotation() {
+    const carousel = document.querySelector('.bride-carousel');
+    if (!carousel) return;
+
+    const track = carousel.querySelector('.bride-gallery');
+    if (!track) return;
+
+    const items = Array.from(track.querySelectorAll('[data-bride-item]'));
+    if (items.length <= 3) return;
+
+    const desktopQuery = window.matchMedia('(min-width: 981px)');
+    const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const groupSize = 3;
+    const interval = 4000;
+    let activeIndex = 0;
+    let timerId = null;
+    let isPaused = false;
+
+    function stopTimer() {
+      if (!timerId) return;
+      window.clearTimeout(timerId);
+      timerId = null;
+    }
+
+    function stopInactiveVideos() {
+      items.forEach((item) => {
+        if (item.classList.contains('is-active')) return;
+        item.querySelectorAll('video').forEach((video) => video.pause?.());
+      });
+    }
+
+    function setActiveGroup(startIndex) {
+      activeIndex = (startIndex + items.length) % items.length;
+
+      items.forEach((item) => {
+        item.classList.remove('is-active', 'is-featured');
+        item.style.order = '';
+      });
+
+      track.getBoundingClientRect();
+
+      for (let offset = 0; offset < groupSize; offset += 1) {
+        const item = items[(activeIndex + offset) % items.length];
+        item.classList.add('is-active');
+        item.style.order = String(offset);
+
+        if (offset === 0) {
+          item.classList.add('is-featured');
+        }
+
+        item.querySelectorAll('video').forEach((video) => {
+          loadVideo(video);
+
+          if (!reducedMotionQuery.matches) {
+            tryPlayVideo(video);
+          }
+        });
+      }
+
+      stopInactiveVideos();
+    }
+
+    function resetForMobile() {
+      stopTimer();
+      track.removeAttribute('data-rotating');
+      items.forEach((item) => {
+        item.style.order = '';
+      });
+    }
+
+    function scheduleNext() {
+      stopTimer();
+
+      if (!desktopQuery.matches || reducedMotionQuery.matches || isPaused) return;
+
+      timerId = window.setTimeout(() => {
+        setActiveGroup(activeIndex + 1);
+        scheduleNext();
+      }, interval);
+    }
+
+    function syncMode() {
+      if (!desktopQuery.matches) {
+        resetForMobile();
+        return;
+      }
+
+      track.dataset.rotating = 'true';
+      setActiveGroup(activeIndex);
+      scheduleNext();
+    }
+
+    carousel.addEventListener('pointerenter', () => {
+      isPaused = true;
+      stopTimer();
+    });
+
+    carousel.addEventListener('pointerleave', () => {
+      isPaused = false;
+      scheduleNext();
+    });
+
+    carousel.addEventListener('focusin', () => {
+      isPaused = true;
+      stopTimer();
+    });
+
+    carousel.addEventListener('focusout', (event) => {
+      if (event.relatedTarget && carousel.contains(event.relatedTarget)) return;
+      isPaused = false;
+      scheduleNext();
+    });
+
+    desktopQuery.addEventListener('change', syncMode);
+    reducedMotionQuery.addEventListener('change', syncMode);
+    syncMode();
   }
 
   function init() {
@@ -268,6 +404,7 @@
     initWhatsAppForm();
     initServiceCarousel();
     initBrideCarousel();
+    initBrideMediaRotation();
   }
 
   if (document.readyState === 'loading') {
