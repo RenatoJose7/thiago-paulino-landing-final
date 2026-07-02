@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://thiagopaulinopenteados.com.br/sitemap.xml
